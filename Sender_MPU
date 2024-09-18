@@ -1,0 +1,65 @@
+#include <esp_now.h>
+#include <WiFi.h>
+#include <Wire.h>
+#include <MPU6050.h>
+
+MPU6050 mpu;
+//MAC Address: 34:B4:72:4E:CB:74
+// Peer device MAC address
+uint8_t receiverAddress[] = {0x34, 0xB4, 0x72, 0x4E, 0xCB, 0x74};
+
+typedef struct struct_message {
+    float accX;
+    float accY;
+    float accZ;
+} struct_message;
+
+struct_message sensorData;
+
+void setup() {
+    Serial.begin(115200);
+    WiFi.mode(WIFI_STA);
+    Wire.begin(7, 6);
+
+    // Initialize MPU6050
+    mpu.initialize();
+    if (!mpu.testConnection()) {
+        Serial.println("MPU6050 connection failed");
+        while (1);
+    }
+
+    // Initialize ESP-NOW
+    if (esp_now_init() != ESP_OK) {
+        Serial.println("Error initializing ESP-NOW");
+        return;
+    }
+
+    // Register peer
+    esp_now_peer_info_t peerInfo;
+    memcpy(peerInfo.peer_addr, receiverAddress, 6);
+    peerInfo.channel = 0;  
+    peerInfo.encrypt = false;
+
+    if (esp_now_add_peer(&peerInfo) != ESP_OK) {
+        Serial.println("Failed to add peer");
+        return;
+    }
+}
+
+void loop() {
+    // Read MPU6050 accelerometer data
+    sensorData.accX = mpu.getAccelerationX();
+    sensorData.accY = mpu.getAccelerationY();
+    sensorData.accZ = mpu.getAccelerationZ();
+
+    // Send data via ESP-NOW
+    esp_err_t result = esp_now_send(receiverAddress, (uint8_t *) &sensorData, sizeof(sensorData));
+
+    if (result == ESP_OK) {
+        Serial.println("Sent successfully");
+    } else {
+        Serial.println("Error sending the data");
+    }
+
+    delay(100); // Adjust the delay as needed
+}
